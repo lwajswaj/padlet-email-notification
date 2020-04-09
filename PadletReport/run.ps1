@@ -20,7 +20,7 @@ $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updat
   $Link = $Entry.permalink
 
   if($Entry.attachment) {
-    if($Entry.attachment -like "https://padlet-uploads.storage.googleapis.com/486112776/*") {
+    if($Entry.attachment -like "*.jpg" -or $Entry.attachment -like "*.png") {
       $Body += "<img src=""{0}"" alt=""{1}"">" -f $Entry.attachment, $Entry.attachment.split("/")[-1]
     }
     else {
