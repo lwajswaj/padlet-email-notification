@@ -9,7 +9,7 @@ $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Fo
 
 $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
 $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json
-$LastHour = (Get-Date -Minute 0 -Second 0 -Millisecond 0).AddHours(-1)
+$LastHour = (Get-Date -Minute 0 -Second 0 -Millisecond 0).AddHours(-10)
 
 $EmailBody = ""
 
