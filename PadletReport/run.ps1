@@ -9,7 +9,7 @@ $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Fo
 
 $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
 $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json
-$LastHour = (Get-Date -Minute 0 -Second 0 -Millisecond 0).AddHours(-10)
+$LastHour = (Get-Date -Minute 0 -Second 0 -Millisecond 0).AddHours(-7)
 
 $EmailBody = ""
 
@@ -46,7 +46,8 @@ ForEach($Groups In ($NewEntries | Group-Object -Property "Wall")) {
 }
 
 if($EmailBody) {
-  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0}" -f $LastHour.ToString("dd/MM HH:mm")
+  "Se encontraron novedades, enviandolas por email"
+  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0}" -f $LastHour.AddHours(3).ToString("dd/MM HH:mm")
   Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8
 }
 else {
