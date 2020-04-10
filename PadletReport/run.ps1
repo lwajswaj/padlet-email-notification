@@ -65,6 +65,19 @@ $ArticleTemplate = @"
 <tr><td height="25"></td></tr>
 "@
 
+$SeparatorTemplate = @"
+<tr>
+    <td>
+        <table bgcolor="#F5F5F5" border="0" cellpadding="0" cellspacing="0" width="100%" style="width:100% !important;">
+            <tr>
+                <td height="2" style="font-size:2px;line-height:2px;">&nbsp;</td>
+            </tr>
+        </table>
+    </td>
+</tr>
+<tr><td height="25"></td></tr>
+"@
+
 $From = $Env:APPSETTING_Sender
 $Recipient = $Env:APPSETTING_Recipient -split ";"
 $SmtpServer = $Env:APPSETTING_SMTPServer
@@ -108,7 +121,12 @@ ForEach($Groups In ($NewEntries | Group-Object -Property "Wall")) {
   $EmailBody += "<tr><td height=""25""></td></tr>"
 
 
-  ForEach($Item In $Groups.Group) {
+  For($i=0; $i -lt $Groups.Group.Count;$i++) {
+    if($i -gt 0) {
+      $EmailBody += $SeparatorTemplate
+    }
+
+    $Item = $Groups.Group[$i]
     $EmailBody += $ArticleTemplate.Replace("##TITLE##",$Item.Title).Replace("##CONTENT##",$Item.Body).Replace("##URL##",$Item.Link)
   }
 
@@ -121,7 +139,7 @@ $EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace
 if($NewEntries.Length -gt 0) {
   "Se encontraron novedades, enviandolas por email"
   $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
-  Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8
+  Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
 }
 else {
   "Sin Novedad"
