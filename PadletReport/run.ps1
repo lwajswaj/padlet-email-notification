@@ -1,5 +1,70 @@
 param($Timer)
 
+function Get-Month{
+  Param(
+    [ValidateRange(1,12)]
+    [int] $Month
+  )
+
+  switch ($Month) {
+    1 {"Enero"}
+    2 {"Febrero"}
+    3 {"Marzo"}
+    4 {"Abril"}
+    5 {"Mayo"}
+    6 {"Junio"}
+    7 {"Julio"}
+    8 {"Agosto"}
+    9 {"Septiembre"}
+    10 {"Octubre"}
+    11 {"Noviembre"}
+    12 {"Diciembre"}
+  }
+}
+
+$TitleTemplate = @"
+<tr><td bgcolor="#29D2E4">
+        <div class="mktEditable" id="header">
+        <table bgcolor="#13829B" border="0" cellpadding="0" cellspacing="0" width="650" class="device-width" align="center">
+            <tr>
+              <td style="color:#ffffff;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:30px;text-align:center;padding:10px 0;">
+                    ##HEADER##
+                </td>
+            </tr>
+        </table>
+        </div>
+</td></tr>
+"@
+
+$ArticleTemplate = @"
+<tr><td>
+  <div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="width:100% !important;text-align:center;">
+        <tr>
+            <td style="color:#13829B;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:20px;">
+                ##TITLE##
+            </td>
+        </tr>
+        <tr>
+            <td height="15"></td>
+        </tr>
+        <tr>
+            <td style="color:#848484;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:15px;">
+                ##CONTENT##<br>
+                <br>
+                <table cellpadding="0" cellspacing="0" border="0" width="180" align="center" bgcolor="#13829B" style="border-right:solid 1px #0c6b80;border-left:solid 1px #0c6b80;border-top:solid 1px #0c6b80;border-bottom:solid 5px #0c6b80;border-radius:3px;">
+                <tr>
+                    <td style="font-size:16px;font-family:'Open Sans',Arial,Sans-serif;color:#FFFFFF;line-height:24px;text-align:center;padding:10px 20px;"><a href="##URL##" style="color:#FFFFFF;text-decoration:none;"><strong>Leer mas &rarr;</strong></a></td>
+                </tr>
+            </table>
+            </td>
+        </tr>
+    </table>
+    </div>
+</td></tr>
+<tr><td height="25"></td></tr>
+"@
+
 $From = $Env:APPSETTING_Sender
 $Recipient = $Env:APPSETTING_Recipient -split ";"
 $SmtpServer = $Env:APPSETTING_SMTPServer
@@ -9,9 +74,9 @@ $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Fo
 
 $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
 $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json
-$LastHour = (Get-Date -Minute 0 -Second 0 -Millisecond 0).AddHours(-7)
+$FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
 
-$NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $LastHour)) {
+$NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
   $Wall = ($Sections | Where-Object -FilterScript {$_.id -eq $Entry.wall_section_id}).Title
   $Title = $Entry.headline
   $Body = $Entry.Body
@@ -19,7 +84,7 @@ $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updat
 
   if($Entry.attachment) {
     if($Entry.attachment -like "*.jpg" -or $Entry.attachment -like "*.png") {
-      $Body += "<img src=""{0}"" alt=""{1}"">" -f $Entry.attachment, $Entry.attachment.split("/")[-1]
+      $Body += "<img src=""{0}"" alt=""{1}"" width=""300"">" -f $Entry.attachment, $Entry.attachment.split("/")[-1]
     }
     else {
       $Body += "<a href=""{0}"">{0}</a>" -f $Entry.attachment
@@ -34,31 +99,28 @@ $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updat
   }
 }
 
-$EmailBody = "<table style=""background-color: #F6F6F6"" width=""100%"" border=""0"" cellspacing=""0"" cellpadding=""0"">"
-$EmailBody += "<tr>"
-$EmailBody += "<td width=""25%"" align=""center"" valign=""top"" style=""font-family:Arial, Helvetica, sans-serif; font-size:2px; color:#ffffff;"">.</td>"
-$EmailBody += "<td width=""50%"" align=""center"" valign=""top"">"
+$EmailBody = ""
 
 ForEach($Groups In ($NewEntries | Group-Object -Property "Wall")) {
-  $EmailBody += "<h1>{0}</h1>" -f $Groups.Name
+  $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name)
+  $EmailBody += "<tr><td>"
+  $EmailBody += "<table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""90%"" style=""widht:90% !important;margin:0 auto !important;"">"
+  $EmailBody += "<tr><td height=""25""></td></tr>"
+
 
   ForEach($Item In $Groups.Group) {
-    $EmailBody += "<div style=""background-color: white"">"
-    $EmailBody += "<h3 style=""text-align: center"">{0}</h3>" -f $Item.Title
-    $EmailBody += $Item.Body
-    $EmailBody += "<br/><a href=""{0}"" style=""background-color:#72B6CB;border:1px solid #72B6CB;border-radius:3px;color:#ffffff;display:inline-block;font-family:sans-serif;font-size:16px;line-height:44px;text-align:center;text-decoration:none;width:150px;-webkit-text-size-adjust:none;mso-hide:all;"">Leer mas &rarr;</a>" -f $Item.Link
-    $EmailBody += "</div><p>&nbsp;</p>"
+    $EmailBody += $ArticleTemplate.Replace("##TITLE##",$Item.Title).Replace("##CONTENT##",$Item.Body).Replace("##URL##",$Item.Link)
   }
+
+  $EmailBody += "</table>"
+  $EmailBody += "</td></tr>"
 }
 
-$EmailBody += "</td>"
-$EmailBody += "<td width=""25%"" align=""center"" valign=""top"" style=""font-family:Arial, Helvetica, sans-serif; font-size:2px; color:#ffffff;"">.</td>"
-$EmailBody += "</tr>"
-$EmailBody += "</table>"
+$EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENIDO_VA_AQUI##", $EmailBody)
 
 if($NewEntries.Length -gt 0) {
   "Se encontraron novedades, enviandolas por email"
-  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0}" -f $LastHour.ToString("dd/MM")
+  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
   Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8
 }
 else {
