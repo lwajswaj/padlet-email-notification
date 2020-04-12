@@ -84,10 +84,33 @@ $SmtpServer = $Env:APPSETTING_SMTPServer
 $apiUser = $Env:APPSETTING_apiUser
 $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
 [pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
-
-$Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
-$Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json
 $FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
+
+if(!(Test-Path -Path "$PSScriptRoot\emailTemplate.html")) {
+  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\emailTemplate.html")
+}
+
+try {
+  $Sections = @((Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json)
+}
+catch {
+  $Sections = @()
+}
+
+if($Sections.Count -eq 0) {
+  throw "Cannot retrieved 'Sections' from padlet"
+}
+
+try {
+  $Entries = @((Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json)
+}
+catch {
+  $Entries = @()
+}
+
+if($Entries.Count -eq 0) {
+  throw "Cannot retrieved 'Entries' from padlet"
+}
 
 $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
   $Wall = ($Sections | Where-Object -FilterScript {$_.id -eq $Entry.wall_section_id}).Title
@@ -137,10 +160,10 @@ ForEach($Groups In ($NewEntries | Group-Object -Property "Wall")) {
 $EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENIDO_VA_AQUI##", $EmailBody)
 
 if($NewEntries.Length -gt 0) {
-  "Se encontraron novedades, enviandolas por email"
+  "News were found, sending them by email"
   $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
   Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
 }
 else {
-  "Sin Novedad"
+  "No News"
 }
