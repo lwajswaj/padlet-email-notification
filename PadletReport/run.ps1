@@ -128,7 +128,7 @@ $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updat
   }
 
   [PSCustomObject]@{
-    "Wall" = $Wall;
+    "Wall" = "{0}|{1}" -f $Entry.wall_section_id,$Wall;
     "Title" = $Title;
     "Body" = $Body;
     "Link" = $Link
@@ -137,8 +137,8 @@ $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updat
 
 $EmailBody = ""
 
-ForEach($Groups In ($NewEntries | Group-Object -Property "Wall")) {
-  $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name)
+ForEach($Groups In ($NewEntries | Group-Object -Property "Wall" | Sort-Object -Property "Name")) {
+  $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name.Substring($Groups.Name.IndexOf("|") + 1))
   $EmailBody += "<tr><td>"
   $EmailBody += "<table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""90%"" style=""widht:90% !important;margin:0 auto !important;"">"
   $EmailBody += "<tr><td height=""25""></td></tr>"
