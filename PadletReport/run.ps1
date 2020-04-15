@@ -90,29 +90,35 @@ if(!(Test-Path -Path "$PSScriptRoot\emailTemplate.html")) {
   throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\emailTemplate.html")
 }
 
+"FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
+
 try {
-  $Sections = @((Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json)
+  $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
 }
 catch {
   $Sections = @()
 }
+
+"Sections found: {0}" -f $Sections.Count
 
 if($Sections.Count -eq 0) {
   throw "Cannot retrieved 'Sections' from padlet"
 }
 
 try {
-  $Entries = @((Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json)
+  $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json
 }
 catch {
   $Entries = @()
 }
 
+"Entries found: {0}" -f $Entries.Count
+
 if($Entries.Count -eq 0) {
   throw "Cannot retrieved 'Entries' from padlet"
 }
 
-$NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
+$NewEntries = @(ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
   $Wall = ($Sections | Where-Object -FilterScript {$_.id -eq $Entry.wall_section_id}).Title
   $Title = $Entry.headline
   $Body = $Entry.Body
@@ -133,33 +139,35 @@ $NewEntries = ForEach($Entry In ($Entries | Where-Object -Property content_updat
     "Body" = $Body;
     "Link" = $Link
   }
-}
+})
 
-$EmailBody = ""
+"New Entries found: {0}" -f $NewEntries.Count
 
-ForEach($Groups In ($NewEntries | Group-Object -Property "Wall" | Sort-Object -Property "Name")) {
-  $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name.Substring($Groups.Name.IndexOf("|") + 1))
-  $EmailBody += "<tr><td>"
-  $EmailBody += "<table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""90%"" style=""widht:90% !important;margin:0 auto !important;"">"
-  $EmailBody += "<tr><td height=""25""></td></tr>"
+if($NewEntries.Count -gt 0) {
+  $EmailBody = ""
+
+  ForEach($Groups In ($NewEntries | Group-Object -Property "Wall" | Sort-Object -Property "Name")) {
+    $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name.Substring($Groups.Name.IndexOf("|") + 1))
+    $EmailBody += "<tr><td>"
+    $EmailBody += "<table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""90%"" style=""widht:90% !important;margin:0 auto !important;"">"
+    $EmailBody += "<tr><td height=""25""></td></tr>"
 
 
-  For($i=0; $i -lt $Groups.Group.Count;$i++) {
-    if($i -gt 0) {
-      $EmailBody += $SeparatorTemplate
+    For($i=0; $i -lt $Groups.Group.Count;$i++) {
+      if($i -gt 0) {
+        $EmailBody += $SeparatorTemplate
+      }
+
+      $Item = $Groups.Group[$i]
+      $EmailBody += $ArticleTemplate.Replace("##TITLE##",$Item.Title).Replace("##CONTENT##",$Item.Body).Replace("##URL##",$Item.Link)
     }
 
-    $Item = $Groups.Group[$i]
-    $EmailBody += $ArticleTemplate.Replace("##TITLE##",$Item.Title).Replace("##CONTENT##",$Item.Body).Replace("##URL##",$Item.Link)
+    $EmailBody += "</table>"
+    $EmailBody += "</td></tr>"
   }
 
-  $EmailBody += "</table>"
-  $EmailBody += "</td></tr>"
-}
+  $EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENIDO_VA_AQUI##", $EmailBody)
 
-$EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENIDO_VA_AQUI##", $EmailBody)
-
-if($NewEntries.Length -gt 0) {
   "News were found, sending them by email"
   $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
   Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
