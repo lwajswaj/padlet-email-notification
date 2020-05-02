@@ -85,12 +85,20 @@ $apiUser = $Env:APPSETTING_apiUser
 $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
 [pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
 $FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
+$DescriptionRegex = New-Object System.Text.RegularExpressions.Regex("<meta name=""twitter:description"" content=""(?<Description>.+)"">")
 
 if(!(Test-Path -Path "$PSScriptRoot\emailTemplate.html")) {
   throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\emailTemplate.html")
 }
 
 "FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
+
+try {
+  $Description = $DescriptionRegex.Match((invoke-webrequest -uri https://padlet.com/jic9de11/Bookmarks).RawContent).Groups["Description"].Value
+}
+catch {
+  $Description = "Porque queremos una escuela habitable, que siga al niño y a la niña respetando su sensibilidad, propiciando para ellos un ámbito estético, que los considere destinatarios de una cultura propia en un proceso interestructurante, entendiendo que influyen en la experiencia educativa construyendo conocimiento con cada descubrimiento, exploración, investigación, interrogante, error y acierto, sin desestimar nada de lo que acontezca."
+}
 
 try {
   $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
@@ -166,7 +174,7 @@ if($NewEntries.Count -gt 0) {
     $EmailBody += "</td></tr>"
   }
 
-  $EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENIDO_VA_AQUI##", $EmailBody)
+  $EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description)
 
   "News were found, sending them by email"
   $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
