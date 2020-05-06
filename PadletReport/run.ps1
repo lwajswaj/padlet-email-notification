@@ -211,8 +211,7 @@ $SeparatorTemplate = @"
     $EmailBody = (Get-Content -Path "$PSScriptRoot\$TemplateFile" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description).Replace("##HEADERIMAGE##",$HeaderImage)
 
     "News were found, sending them by email"
-    #Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
-    $EmailBody | Set-Content ("C:\Temp\{0}.html" -f $Padlet.Name)
+    Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
   }
   else {
     "No News"
