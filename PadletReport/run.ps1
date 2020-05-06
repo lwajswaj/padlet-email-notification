@@ -22,38 +22,43 @@ function Get-Month{
   }
 }
 
-$From = $Env:APPSETTING_Sender
-$Recipient = $Env:APPSETTING_Recipient -split ";"
+if(!(Test-Path -Path "$PSScriptRoot\appSettings.json")) {
+  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\appSettings.json")
+}
+
+$Configuration = Get-Content -Path "$PSScriptRoot\appSettings.json" | ConvertFrom-Json
 $SmtpServer = $Env:APPSETTING_SMTPServer
 $apiUser = $Env:APPSETTING_apiUser
 $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
 [pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
 $FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
-$WallId = $Env:APPSETTING_WallId
+$DescriptionRegex = New-Object System.Text.RegularExpressions.Regex("<meta name=""twitter:description"" content=""(?<Description>.+)"">")
+$IsPadletUri = NEw-Object System.Text.RegularExpressions.Regex("http(s)?://padlet\.com/.+",[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
-if(!$WallId) {
-  throw "Wall Id not provided, cannot continue."
-}
+"FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
 
-if($WallId -eq "62740115") {
-  $SeparatorColor = "#fada5e"
-  $TitleBackgroundColor = "#ffc40c"
-  $ButtonColor = "#858000"
-  $TemplateFile = "emailTemplate_salaAmarilla.html"
-  $Subject = "Sala Amarilla (JIC 09 DE 1) - Novedades - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
-  $DescriptionUri = ""
-  $Description = "La educación no cambia el mundo, cambia a las personas que van a cambiar el mundo. Paulo Freire"
-}
-elseif($WallId -eq "56471570") {
-  $SeparatorColor = "#F5F5F5"
-  $TitleBackgroundColor = "#13829B"
-  $ButtonColor = "#0c6b80"
-  $TemplateFile = "emailTemplate.html"
-  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
-  $DescriptionUri = "https://padlet.com/jic9de11/Bookmarks"
-}
+ForEach($Padlet In ($Configuration | Where-Object -Property Enabled -eq -Value $true)) {
+  "Loading Specific Variables for '{0}'" -f $Padlet.Name
 
-$TitleTemplate = @"
+  $From = $Padlet.Configuration.From
+  $Recipient = $Padlet.Configuration.Recipient
+  $WallId = $Padlet.Configuration.WallId
+  $SeparatorColor = $Padlet.Configuration.SeparatorColor
+  $TitleBackgroundColor = $Padlet.Configuration.TitleBackgroundColor
+  $ButtonColor = $Padlet.Configuration.ButtonColor
+  $TemplateFile = $Padlet.Configuration.TemplateFile
+  $Subject = "{0} - {1} de {2}" -f $Padlet.Configuration.Subject, $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
+  $Description = $Padlet.Configuration.Description
+
+  if(!$WallId) {
+    throw "Wall Id not provided, cannot continue."
+  }
+
+  if(!(Test-Path -Path "$PSScriptRoot\$TemplateFile")) {
+    throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\$TemplateFile")
+  }
+
+  $TitleTemplate = @"
 <tr><td bgcolor="#29D2E4">
         <div class="mktEditable" id="header">
         <table bgcolor="$TitleBackgroundColor" border="0" cellpadding="0" cellspacing="0" width="650" class="device-width" align="center">
@@ -109,105 +114,95 @@ $SeparatorTemplate = @"
 <tr><td height="25"></td></tr>
 "@
 
-$DescriptionRegex = New-Object System.Text.RegularExpressions.Regex("<meta name=""twitter:description"" content=""(?<Description>.+)"">")
+  if($IsPadletUri.IsMatch($Description)) {
+    try {
+      $Description = $DescriptionRegex.Match((invoke-webrequest -uri $Description).RawContent).Groups["Description"].Value
+    }
+    catch {
+      $Description = ""
+    }
+  }
 
-if(!(Test-Path -Path "$PSScriptRoot\$TemplateFile")) {
-  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\$TemplateFile")
-}
-
-"FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
-
-if($DescriptionUri) {
   try {
-    $Description = $DescriptionRegex.Match((invoke-webrequest -uri $DescriptionUri).RawContent).Groups["Description"].Value
+    $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=$WallId).Content | ConvertFrom-Json
   }
   catch {
-    $Description = "Porque queremos una escuela habitable, que siga al niño y a la niña respetando su sensibilidad, propiciando para ellos un ámbito estético, que los considere destinatarios de una cultura propia en un proceso interestructurante, entendiendo que influyen en la experiencia educativa construyendo conocimiento con cada descubrimiento, exploración, investigación, interrogante, error y acierto, sin desestimar nada de lo que acontezca."
+    $Sections = @()
   }
-}
-elseif(!$Description) {
-  $Description = ""
-}
 
-try {
-  $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=$WallId).Content | ConvertFrom-Json
-}
-catch {
-  $Sections = @()
-}
+  "Sections found: {0}" -f $Sections.Count
 
-"Sections found: {0}" -f $Sections.Count
+  if($Sections.Count -eq 0) {
+    throw "Cannot retrieved 'Sections' from padlet"
+  }
 
-if($Sections.Count -eq 0) {
-  throw "Cannot retrieved 'Sections' from padlet"
-}
+  try {
+    $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=$WallId).Content | ConvertFrom-Json
+  }
+  catch {
+    $Entries = @()
+  }
 
-try {
-  $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=$WallId).Content | ConvertFrom-Json
-}
-catch {
-  $Entries = @()
-}
+  "Entries found: {0}" -f $Entries.Count
 
-"Entries found: {0}" -f $Entries.Count
+  if($Entries.Count -eq 0) {
+    throw "Cannot retrieved 'Entries' from padlet"
+  }
 
-if($Entries.Count -eq 0) {
-  throw "Cannot retrieved 'Entries' from padlet"
-}
+  $NewEntries = @(ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
+    $Wall = ($Sections | Where-Object -FilterScript {$_.id -eq $Entry.wall_section_id}).Title
+    $Title = $Entry.headline
+    $Body = $Entry.Body
+    $Link = $Entry.permalink
 
-$NewEntries = @(ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
-  $Wall = ($Sections | Where-Object -FilterScript {$_.id -eq $Entry.wall_section_id}).Title
-  $Title = $Entry.headline
-  $Body = $Entry.Body
-  $Link = $Entry.permalink
-
-  if($Entry.attachment) {
-    if($Entry.attachment -like "*.jpg" -or $Entry.attachment -like "*.png") {
-      $Body += "<img src=""{0}"" alt=""{1}"" width=""300"">" -f $Entry.attachment, $Entry.attachment.split("/")[-1]
+    if($Entry.attachment) {
+      if($Entry.attachment -like "*.jpg" -or $Entry.attachment -like "*.png") {
+        $Body += "<img src=""{0}"" alt=""{1}"" width=""300"">" -f $Entry.attachment, $Entry.attachment.split("/")[-1]
+      }
+      else {
+        $Body += "<a href=""{0}"">{0}</a>" -f $Entry.attachment
+      }
     }
-    else {
-      $Body += "<a href=""{0}"">{0}</a>" -f $Entry.attachment
+
+    [PSCustomObject]@{
+      "Wall" = "{0}|{1}" -f $Entry.wall_section_id,$Wall;
+      "Title" = $Title;
+      "Body" = $Body;
+      "Link" = $Link
     }
-  }
+  })
 
-  [PSCustomObject]@{
-    "Wall" = "{0}|{1}" -f $Entry.wall_section_id,$Wall;
-    "Title" = $Title;
-    "Body" = $Body;
-    "Link" = $Link
-  }
-})
+  "New Entries found: {0}" -f $NewEntries.Count
 
-"New Entries found: {0}" -f $NewEntries.Count
+  if($NewEntries.Count -gt 0) {
+    $EmailBody = ""
 
-if($NewEntries.Count -gt 0) {
-  $EmailBody = ""
-
-  ForEach($Groups In ($NewEntries | Group-Object -Property "Wall" | Sort-Object -Property "Name")) {
-    $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name.Substring($Groups.Name.IndexOf("|") + 1))
-    $EmailBody += "<tr><td>"
-    $EmailBody += "<table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""90%"" style=""widht:90% !important;margin:0 auto !important;"">"
-    $EmailBody += "<tr><td height=""25""></td></tr>"
+    ForEach($Groups In ($NewEntries | Group-Object -Property "Wall" | Sort-Object -Property "Name")) {
+      $EmailBody += $TitleTemplate.Replace("##HEADER##", $Groups.Name.Substring($Groups.Name.IndexOf("|") + 1))
+      $EmailBody += "<tr><td>"
+      $EmailBody += "<table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""90%"" style=""widht:90% !important;margin:0 auto !important;"">"
+      $EmailBody += "<tr><td height=""25""></td></tr>"
 
 
-    For($i=0; $i -lt $Groups.Group.Count;$i++) {
-      if($i -gt 0) {
-        $EmailBody += $SeparatorTemplate
+      For($i=0; $i -lt $Groups.Group.Count;$i++) {
+        if($i -gt 0) {
+          $EmailBody += $SeparatorTemplate
+        }
+
+        $Item = $Groups.Group[$i]
+        $EmailBody += $ArticleTemplate.Replace("##TITLE##",$Item.Title).Replace("##CONTENT##",$Item.Body).Replace("##URL##",$Item.Link)
       }
 
-      $Item = $Groups.Group[$i]
-      $EmailBody += $ArticleTemplate.Replace("##TITLE##",$Item.Title).Replace("##CONTENT##",$Item.Body).Replace("##URL##",$Item.Link)
+      $EmailBody += "</table>"
+      $EmailBody += "</td></tr>"
     }
 
-    $EmailBody += "</table>"
-    $EmailBody += "</td></tr>"
+    $EmailBody = (Get-Content -Path "$PSScriptRoot\$TemplateFile" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description)
+
+    "News were found, sending them by email"
+    Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
   }
-
-  $EmailBody = (Get-Content -Path "$PSScriptRoot\$TemplateFile" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description)
-
-  "News were found, sending them by email"
-  Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
-}
-else {
-  "No News"
+  else {
+    "No News"
+  }
 }
