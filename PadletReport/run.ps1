@@ -22,18 +22,28 @@ function Get-Month{
   }
 }
 
-if(!(Test-Path -Path "$PSScriptRoot\appSettings.json")) {
-  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\appSettings.json")
+$Environment = $Env:APPSETTING_Environment
+"Environment is now = $Environment"
+$ConfigurationFileName = "appSettings.json"
+
+if($Environment) {
+  $ConfigurationFileName = "appSettings.{0}.json" -f $Environment
 }
 
-$Configuration = Get-Content -Path "$PSScriptRoot\appSettings.json" | ConvertFrom-Json
+"ConfigurationFileName is now = $ConfigurationFileName"
+
+if(!(Test-Path -Path "$PSScriptRoot\$ConfigurationFileName")) {
+  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\$ConfigurationFileName")
+}
+
+$Configuration = Get-Content -Path "$PSScriptRoot\$ConfigurationFileName" | ConvertFrom-Json
 $SmtpServer = $Env:APPSETTING_SMTPServer
 $apiUser = $Env:APPSETTING_apiUser
 $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
 [pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
 $FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
 $DescriptionRegex = New-Object System.Text.RegularExpressions.Regex("<meta name=""twitter:description"" content=""(?<Description>.+)"">")
-$IsPadletUri = NEw-Object System.Text.RegularExpressions.Regex("http(s)?://padlet\.com/.+",[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$IsPadletUri = New-Object System.Text.RegularExpressions.Regex("http(s)?://padlet\.com/.+",[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 "FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
 
@@ -46,6 +56,7 @@ ForEach($Padlet In ($Configuration | Where-Object -Property Enabled -eq -Value $
   $SeparatorColor = $Padlet.Configuration.SeparatorColor
   $TitleBackgroundColor = $Padlet.Configuration.TitleBackgroundColor
   $ButtonColor = $Padlet.Configuration.ButtonColor
+  $HeaderImage = $Padlet.Configuration.HeaderImage
   $TemplateFile = $Padlet.Configuration.TemplateFile
   $Subject = "{0} - {1} de {2}" -f $Padlet.Configuration.Subject, $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
   $Description = $Padlet.Configuration.Description
@@ -197,10 +208,11 @@ $SeparatorTemplate = @"
       $EmailBody += "</td></tr>"
     }
 
-    $EmailBody = (Get-Content -Path "$PSScriptRoot\$TemplateFile" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description)
+    $EmailBody = (Get-Content -Path "$PSScriptRoot\$TemplateFile" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description).Replace("##HEADERIMAGE##",$HeaderImage)
 
     "News were found, sending them by email"
-    Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
+    #Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
+    $EmailBody | Set-Content ("C:\Temp\{0}.html" -f $Padlet.Name)
   }
   else {
     "No News"
