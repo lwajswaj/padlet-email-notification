@@ -22,10 +22,41 @@ function Get-Month{
   }
 }
 
+$From = $Env:APPSETTING_Sender
+$Recipient = $Env:APPSETTING_Recipient -split ";"
+$SmtpServer = $Env:APPSETTING_SMTPServer
+$apiUser = $Env:APPSETTING_apiUser
+$apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
+[pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
+$FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
+$WallId = $Env:APPSETTING_WallId
+
+if(!$WallId) {
+  throw "Wall Id not provided, cannot continue."
+}
+
+if($WallId -eq "62740115") {
+  $SeparatorColor = "#fada5e"
+  $TitleBackgroundColor = "#ffc40c"
+  $ButtonColor = "#858000"
+  $TemplateFile = "emailTemplate_salaAmarilla.html"
+  $Subject = "Sala Amarilla (JIC 09 DE 1) - Novedades - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
+  $DescriptionUri = ""
+  $Description = "La educación no cambia el mundo, cambia a las personas que van a cambiar el mundo. Paulo Freire"
+}
+elseif($WallId -eq "56471570") {
+  $SeparatorColor = "#F5F5F5"
+  $TitleBackgroundColor = "#13829B"
+  $ButtonColor = "#0c6b80"
+  $TemplateFile = "emailTemplate.html"
+  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
+  $DescriptionUri = "https://padlet.com/jic9de11/Bookmarks"
+}
+
 $TitleTemplate = @"
 <tr><td bgcolor="#29D2E4">
         <div class="mktEditable" id="header">
-        <table bgcolor="#13829B" border="0" cellpadding="0" cellspacing="0" width="650" class="device-width" align="center">
+        <table bgcolor="$TitleBackgroundColor" border="0" cellpadding="0" cellspacing="0" width="650" class="device-width" align="center">
             <tr>
               <td style="color:#ffffff;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:30px;text-align:center;padding:10px 0;">
                     ##HEADER##
@@ -41,7 +72,7 @@ $ArticleTemplate = @"
   <div>
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="width:100% !important;text-align:center;">
         <tr>
-            <td style="color:#13829B;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:20px;">
+            <td style="color:$TitleBackgroundColor;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:20px;">
                 ##TITLE##
             </td>
         </tr>
@@ -52,7 +83,7 @@ $ArticleTemplate = @"
             <td style="color:#848484;font-weight:400;font-family:'Roboto',Arial,Sans-serif;font-size:15px;">
                 ##CONTENT##<br>
                 <br>
-                <table cellpadding="0" cellspacing="0" border="0" width="180" align="center" bgcolor="#13829B" style="border-right:solid 1px #0c6b80;border-left:solid 1px #0c6b80;border-top:solid 1px #0c6b80;border-bottom:solid 5px #0c6b80;border-radius:3px;">
+                <table cellpadding="0" cellspacing="0" border="0" width="180" align="center" bgcolor="$TitleBackgroundColor" style="border-right:solid 1px $ButtonColor;border-left:solid 1px $ButtonColor;border-top:solid 1px $ButtonColor;border-bottom:solid 5px $ButtonColor;border-radius:3px;">
                 <tr>
                     <td style="font-size:16px;font-family:'Open Sans',Arial,Sans-serif;color:#FFFFFF;line-height:24px;text-align:center;padding:10px 20px;"><a href="##URL##" style="color:#FFFFFF;text-decoration:none;"><strong>Leer mas &rarr;</strong></a></td>
                 </tr>
@@ -68,7 +99,7 @@ $ArticleTemplate = @"
 $SeparatorTemplate = @"
 <tr>
     <td>
-        <table bgcolor="#F5F5F5" border="0" cellpadding="0" cellspacing="0" width="100%" style="width:100% !important;">
+        <table bgcolor="$SeparatorColor" border="0" cellpadding="0" cellspacing="0" width="100%" style="width:100% !important;">
             <tr>
                 <td height="2" style="font-size:2px;line-height:2px;">&nbsp;</td>
             </tr>
@@ -78,30 +109,28 @@ $SeparatorTemplate = @"
 <tr><td height="25"></td></tr>
 "@
 
-$From = $Env:APPSETTING_Sender
-$Recipient = $Env:APPSETTING_Recipient -split ";"
-$SmtpServer = $Env:APPSETTING_SMTPServer
-$apiUser = $Env:APPSETTING_apiUser
-$apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
-[pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
-$FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
 $DescriptionRegex = New-Object System.Text.RegularExpressions.Regex("<meta name=""twitter:description"" content=""(?<Description>.+)"">")
 
-if(!(Test-Path -Path "$PSScriptRoot\emailTemplate.html")) {
-  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\emailTemplate.html")
+if(!(Test-Path -Path "$PSScriptRoot\$TemplateFile")) {
+  throw ("One of this script dependencies is missing: {0}. Please, verify and try again" -f "$PSScriptRoot\$TemplateFile")
 }
 
 "FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
 
-try {
-  $Description = $DescriptionRegex.Match((invoke-webrequest -uri https://padlet.com/jic9de11/Bookmarks).RawContent).Groups["Description"].Value
+if($DescriptionUri) {
+  try {
+    $Description = $DescriptionRegex.Match((invoke-webrequest -uri $DescriptionUri).RawContent).Groups["Description"].Value
+  }
+  catch {
+    $Description = "Porque queremos una escuela habitable, que siga al niño y a la niña respetando su sensibilidad, propiciando para ellos un ámbito estético, que los considere destinatarios de una cultura propia en un proceso interestructurante, entendiendo que influyen en la experiencia educativa construyendo conocimiento con cada descubrimiento, exploración, investigación, interrogante, error y acierto, sin desestimar nada de lo que acontezca."
+  }
 }
-catch {
-  $Description = "Porque queremos una escuela habitable, que siga al niño y a la niña respetando su sensibilidad, propiciando para ellos un ámbito estético, que los considere destinatarios de una cultura propia en un proceso interestructurante, entendiendo que influyen en la experiencia educativa construyendo conocimiento con cada descubrimiento, exploración, investigación, interrogante, error y acierto, sin desestimar nada de lo que acontezca."
+elseif(!$Description) {
+  $Description = ""
 }
 
 try {
-  $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=56471570).Content | ConvertFrom-Json
+  $Sections = (Invoke-WebRequest -Uri https://padlet.com/wall_sections?wall_id=$WallId).Content | ConvertFrom-Json
 }
 catch {
   $Sections = @()
@@ -114,7 +143,7 @@ if($Sections.Count -eq 0) {
 }
 
 try {
-  $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=56471570).Content | ConvertFrom-Json
+  $Entries = (Invoke-WebRequest -Uri  https://padlet.com/wishes?wall_id=$WallId).Content | ConvertFrom-Json
 }
 catch {
   $Entries = @()
@@ -174,10 +203,9 @@ if($NewEntries.Count -gt 0) {
     $EmailBody += "</td></tr>"
   }
 
-  $EmailBody = (Get-Content -Path "$PSScriptRoot\emailTemplate.html" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description)
+  $EmailBody = (Get-Content -Path "$PSScriptRoot\$TemplateFile" -Raw).Replace("##CONTENT_GOES_HERE##", $EmailBody).Replace("##DESCRIPCION##", $Description)
 
   "News were found, sending them by email"
-  $Subject = "JIC N° 9 DE 1 - Padlet Update - {0} de {1}" -f $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
   Send-MailMessage -Body $EmailBody -BodyAsHtml -To $Recipient -Subject $Subject -SmtpServer $SmtpServer -Credential $apiCredential -From $From -Encoding utf8 
 }
 else {
