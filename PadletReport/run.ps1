@@ -22,6 +22,7 @@ function Get-Month{
   }
 }
 
+$global:erroractionpreference = 1
 $Environment = $Env:APPSETTING_Environment
 "Environment is now = $Environment"
 $ConfigurationFileName = "appSettings.json"
@@ -41,10 +42,10 @@ $SmtpServer = $Env:APPSETTING_SMTPServer
 $apiUser = $Env:APPSETTING_apiUser
 $apiKey = ConvertTo-SecureString -String $Env:APPSETTING_apiKey -AsPlainText -Force
 [pscredential] $apiCredential = New-Object System.Management.Automation.PSCredential ($apiUser, $apiKey)
-$FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
 $DescriptionRegex = New-Object System.Text.RegularExpressions.Regex("<meta name=""twitter:description"" content=""(?<Description>.+)"">")
 $IsPadletUri = New-Object System.Text.RegularExpressions.Regex("http(s)?://padlet\.com/.+",[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
+$FilterDate = (Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0).AddDays(-1)
 "FilterDate is now = {0}" -f $FilterDate.ToString("MM/dd/yyyy")
 
 ForEach($Padlet In ($Configuration | Where-Object -Property Enabled -eq -Value $true)) {
