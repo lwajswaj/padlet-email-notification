@@ -60,6 +60,7 @@ ForEach($Padlet In ($Configuration | Where-Object -Property Enabled -eq -Value $
   $TemplateFile = $Padlet.Configuration.TemplateFile
   $Subject = "{0} - {1} de {2}" -f $Padlet.Configuration.Subject, $FilterDate.Day, (Get-Month -Month $FilterDate.Month)
   $Description = $Padlet.Configuration.Description
+  $DateFilter = $Padlet.Configuration.DateFilter
 
   if(!$WallId) {
     throw "Wall Id not provided, cannot continue."
@@ -160,7 +161,7 @@ $SeparatorTemplate = @"
     throw "Cannot retrieved 'Entries' from padlet"
   }
 
-  $NewEntries = @(ForEach($Entry In ($Entries | Where-Object -Property content_updated_at -gt -Value $FilterDate | Sort-Object -Property content_updated_at)) {
+  $NewEntries = @(ForEach($Entry In ($Entries | Where-Object -Property $DateFilter -gt -Value $FilterDate | Sort-Object -Property $DateFilter)) {
     $Wall = ($Sections | Where-Object -FilterScript {$_.id -eq $Entry.wall_section_id}).Title
     $Title = $Entry.headline
     $Body = $Entry.Body
