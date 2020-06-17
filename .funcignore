@@ -3,3 +3,4 @@
 local.settings.json
 test
 appSettings.dev.json
+set-localenvironment.ps1
